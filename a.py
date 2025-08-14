@@ -106,7 +106,7 @@ def main():
         = get_esproblem(atoms=atoms)
 
     print(nuclear_repulsion_energy)
-    sys.exit()
+    # sys.exit()
 
     from qiskit_nature.second_q.mappers import JordanWignerMapper
     mapper = JordanWignerMapper()
