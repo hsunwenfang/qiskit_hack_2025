@@ -87,6 +87,53 @@ def get_effsu2_ansatz(es_problem, reps):
     effsu2_initial_points = [0.01] * (effsu2_ansatz.num_parameters)
     return effsu2_ansatz, effsu2_initial_points
 
+
+def get_ucjop_ansatz(atoms):
+    import pyscf
+    import pyscf.cc
+    mol = pyscf.gto.Mole()
+    mol.build(
+        atom=atoms,
+        basis="sto-3g",
+    )
+    # Get CCSD t2 amplitudes for initializing the ansatz
+    # Define active space
+    n_frozen = 0
+    active_space = range(n_frozen, mol.nao_nr())
+    num_orbitals = len(active_space)
+
+    # Get molecular integrals
+    scf = pyscf.scf.RHF(mol).run()
+    ccsd = pyscf.cc.CCSD(scf, frozen=[i for i in range(mol.nao_nr()) if i not in active_space]).run()
+    t1 = ccsd.t1
+    t2 = ccsd.t2
+
+    n_reps = 1
+    alpha_alpha_indices = [(p, p + 1) for p in range(num_orbitals - 1)]
+    alpha_beta_indices = [(p, p) for p in range(0, num_orbitals, 4)]
+    import ffsim
+    ucj_op = ffsim.UCJOpSpinBalanced.from_t_amplitudes(
+        t2=t2,
+        t1=t1,
+        n_reps=n_reps,
+        interaction_pairs=(alpha_alpha_indices, alpha_beta_indices),
+    )
+    # create an empty quantum circuit
+    from qiskit import QuantumCircuit, QuantumRegister
+    qr = QuantumRegister(2 * num_orbitals, name="qr")
+    qc = QuantumCircuit(qr)
+
+    n_electrons = int(sum(scf.mo_occ[active_space]))
+    num_elec_a = (n_electrons + mol.spin) // 2
+    num_elec_b = (n_electrons - mol.spin) // 2
+    # prepare Hartree-Fock state as the reference state and append it to the quantum circuit
+    nelec = (num_elec_a, num_elec_b)
+    qc.append(ffsim.qiskit.PrepareHartreeFockJW(num_orbitals, nelec), qr)
+
+    # apply the UCJ operator to the reference state
+    qc.append(ffsim.qiskit.UCJOpSpinBalancedJW(ucj_op), qr)
+    return qc, None
+
 def main():
 
 
@@ -100,7 +147,19 @@ def main():
 
     atoms = [["N", (0.00, 0.00, 0.00)],  ["N", (0.00, 0.00, 1.19)]]
 
-    atoms = [["C", (0, 0, 0)], ["O", (-1.1970, 0, 0)], ["O", (1.1970, 0, 0)]]
+    # atoms = [["C", (0, 0, 0)], ["O", (-1.1970, 0, 0)], ["O", (1.1970, 0, 0)]]
+
+    atoms = [
+        ["C", (-1.017842, -0.115990, 0.030490)],
+        ["C", (0.492063, -0.219613, 0.001862)],
+        ["O", (1.043592, 1.085427, -0.089465)],
+        ["H", (-1.387666, 0.381340, -0.872279)],
+        ["H", (-1.475991, -1.106465, 0.100718)],
+        ["H", (-1.347128, 0.487053, 0.883138)],
+        ["H", (0.861659, -0.695286, 0.915204)],
+        ["H", (0.820575,   -0.802422,   -0.863860)],
+        ["H", (2.010738,    0.985956,   -0.105809)]
+    ]
 
     es_problem, hcore, eri, nuclear_repulsion_energy, nelec, num_orbitals \
         = get_esproblem(atoms=atoms)
@@ -112,6 +171,7 @@ def main():
     mapper = JordanWignerMapper()
 
     ansatz, initial_points = get_effsu2_ansatz(es_problem, 3)
+    # ansatz, initial_points = get_ucjop_ansatz(atoms)
 
     from qiskit_algorithms.optimizers import SLSQP, L_BFGS_B
     from qiskit.primitives import Estimator
@@ -121,6 +181,8 @@ def main():
     optimizer = L_BFGS_B()
     from qiskit_aer import AerSimulator
     backend = AerSimulator()
+    from qiskit_ibm_runtime.fake_provider import FakeSherbrooke
+    backend = FakeSherbrooke()
     from qiskit_ibm_runtime import QiskitRuntimeService
     service = QiskitRuntimeService.save_account(
         channel="ibm_quantum_platform",
