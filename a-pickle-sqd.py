@@ -106,9 +106,13 @@ vqe_info = pickle.loads(Path("vqe_info.pickle").read_bytes())
 (ansatz, evaluation_count, parameters_vars, estimated_value, meta_dict) = vqe_info
 
 vqe_iter = 200 # Index of intermediate VQE result to SQD
+evaluation_count = evaluation_count[:vqe_iter]
+parameters_vars = parameters_vars[:vqe_iter]
+estimated_value = estimated_value[:vqe_iter]
+meta_dict = meta_dict[:vqe_iter]
 # for counts, parameters, value, metadata in zip(evaluation_count, parameters_vars, estimated_value, meta_dict):
     # print(f"iter: {counts:4d}, energy: {value:.5f}, parameters: {parameters}")
-for counts, value in list(zip(evaluation_count, estimated_value))[:vqe_iter]:
+for counts, value in zip(evaluation_count, estimated_value):
     print(f"iter: {counts:4d}, energy: {value:.5f}")
 
 ansatz.measure_all()
@@ -118,7 +122,7 @@ pass_manager = generate_preset_pass_manager(
 )
 pass_manager.pre_init = ffsim.qiskit.PRE_INIT
 isa_circuit = pass_manager.run(ansatz)
-job = sampler.run([(isa_circuit, parameters_vars[vqe_iter])], shots=10_000)
+job = sampler.run([(isa_circuit, parameters_vars[-1])], shots=10_000)
 primitive_result = job.result()
 print('primitive result:', primitive_result)
 pub_result = primitive_result[0]
