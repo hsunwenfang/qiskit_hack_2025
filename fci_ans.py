@@ -8,7 +8,8 @@ H4 = [["H", (0.00, 0.00, 0.00 + i * 1.0)] for i in range(4)]
 H6 = [["H", (0.00, 0.00, 0.00 + i * 1.0)] for i in range(6)]
 H8 = [["H", (0.00, 0.00, 0.00 + i * 1.0)] for i in range(8)]
 
-mol.atom = H2
+atoms = [["C", (0, 0, 0)], ["O", (-1.1970, 0, 0)], ["O", (1.1970, 0, 0)]]
+mol.atom = atoms
 
 mol.basis = 'sto-3g'
 mol.spin = 0
