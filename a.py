@@ -1,28 +1,14 @@
 import os, sys
+from pathlib import Path
 import time
-from functools import partial
 import numpy as np
-import ffsim
-from qiskit_nature.units import DistanceUnit
-from qiskit_nature.second_q.drivers import PySCFDriver
-from qiskit_nature.second_q.mappers import JordanWignerMapper
-from qiskit_algorithms import VQE
-from qiskit_algorithms.optimizers import SLSQP, L_BFGS_B
-from qiskit.primitives import Estimator
-from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
-from qiskit_nature.second_q.circuit.library import HartreeFock, UCCSD
-from qiskit_algorithms import VQE
-from qiskit.circuit.library import TwoLocal
-from qiskit_nature.second_q.algorithms import GroundStateEigensolver
-from qiskit_ibm_runtime import SamplerV2 as Sampler
-from qiskit_aer import AerSimulator
 import matplotlib.pyplot as plt
-from qiskit_addon_sqd.fermion import SCIResult, diagonalize_fermionic_hamiltonian, solve_sci_batch
 
 def get_esproblem(atoms):
     import pyscf
     import pyscf.mcscf
-    # atoms = [["H", (0.00, 0.00, 0.00)], ["H", (0.00, 0.00, 1.0)], ["H", (0.00, 0.00, 2.0)], ["H", (0.00, 0.00, 3.0)]]
+    from qiskit_nature.units import DistanceUnit
+    from qiskit_nature.second_q.drivers import PySCFDriver
     mol = pyscf.gto.Mole()
     mol.build(
         atom=atoms,
@@ -55,6 +41,7 @@ def get_esproblem(atoms):
 
 
 def get_uccsd_ansatz(es_problem, mapper):
+    from qiskit_nature.second_q.circuit.library import HartreeFock, UCCSD
     uccsd_ansatz = UCCSD(
         es_problem.num_spatial_orbitals,
         es_problem.num_particles,
@@ -65,26 +52,11 @@ def get_uccsd_ansatz(es_problem, mapper):
             mapper,
         ),
     )
-    return uccsd_ansatz
-
-def main():
-
-    atoms = [["H", (0.00, 0.00, 0.00)], ["H", (0.00, 0.00, 1.0)], ["H", (0.00, 0.00, 2.0)], ["H", (0.00, 0.00, 3.0)]]
-    atoms = [["H", (0.00, 0.00, 0.00 + i * 1.0)] for i in range(4)]
-    atoms = [["H", (0.00, 0.00, 0.00 + i * 1.0)] for i in range(16)]
-
-    es_problem, hcore, eri, nuclear_repulsion_energy, nelec, num_orbitals \
-        = get_esproblem(atoms=atoms)
-
-    mapper = JordanWignerMapper()
-
-    from qiskit.circuit.library import ExcitationPreserving, EfficientSU2
-
-    # UCCSD
-    uccsd_ansatz = get_uccsd_ansatz(es_problem, mapper)
     uccsd_initial_points = [0.0] * uccsd_ansatz.num_parameters
+    return uccsd_ansatz, uccsd_initial_points
 
-    # TwoLocal
+def get_tlc_ansatz(es_problem):
+    from qiskit.circuit.library import TwoLocal
     tlc_ansatz = TwoLocal(
         rotation_blocks=["h", "rx"],
         entanglement_blocks="cz",
@@ -94,24 +66,60 @@ def main():
     )
     # the initial point cannot be too small
     tlc_initial_points = [0.001] * (es_problem.num_spatial_orbitals * 2 * 3)
+    return tlc_ansatz, tlc_initial_points
 
-    # ExcitationPreserving
+def get_ecipre_ansatz(es_problem):
+    from qiskit.circuit.library import ExcitationPreserving
     ecipre_ansatz = ExcitationPreserving(
         num_qubits=es_problem.num_spatial_orbitals,
-        # num_particles=es_problem.num_particles,
-        # mapper=mapper,
     )
     ecipre_initial_points = [0.0] * (2*ecipre_ansatz.num_parameters)
+    return ecipre_ansatz, ecipre_initial_points
 
-    # EfficientSU2
+def get_effsu2_ansatz(es_problem):
+    from qiskit.circuit.library import EfficientSU2
     effsu2_ansatz = EfficientSU2(
         num_qubits=es_problem.num_spatial_orbitals,
         entanglement="full",
     )
     effsu2_initial_points = [0.01] * (effsu2_ansatz.num_parameters*2)
+    return effsu2_ansatz, effsu2_initial_points
 
+def main():
+
+    h_count = 6
+    atoms = [["H", (0.00, 0.00, 0.00 + i * 1.0)] for i in range(h_count)]
+
+    h_count = 2
+    atoms = [["N", (0.00, 0.00, 0.00)],  ["N", (0.00, 0.00, 1.19)]]
+
+    es_problem, hcore, eri, nuclear_repulsion_energy, nelec, num_orbitals \
+        = get_esproblem(atoms=atoms)
+
+    from qiskit_nature.second_q.mappers import JordanWignerMapper
+    mapper = JordanWignerMapper()
+
+    ansatz, initial_points = get_effsu2_ansatz(es_problem)
+
+    from qiskit_algorithms.optimizers import SLSQP, L_BFGS_B
+    from qiskit.primitives import Estimator
+    # api_token hsunwenfang
+    API_TOKEN = "TIurfftvnSMw9Hpt-ebxpDfVhSFVaR76t6suu1tCba0Z"
+    from qiskit_ibm_runtime import SamplerV2 as Sampler
     optimizer = L_BFGS_B()
+    from qiskit_aer import AerSimulator
     backend = AerSimulator()
+    from qiskit_ibm_runtime import QiskitRuntimeService
+    service = QiskitRuntimeService.save_account(
+        channel="ibm_quantum_platform",
+        token=API_TOKEN,
+        instance='crn:v1:bluemix:public:quantum-computing:us-east:a/507d516b33cb4e7e8c37ef9b295e9e85:70f7ee4f-ff64-43d0-b5de-867e52073b96::',
+        name='q222',
+        overwrite=True
+    )
+    service = QiskitRuntimeService(name="q222")
+    # backend = service.least_busy(operational=True, simulator=False)
+    print(backend)
     estimator = Estimator()
     sampler = Sampler(mode=backend)
 
@@ -120,26 +128,34 @@ def main():
     estimated_value=[]
     meta_dict=[]
 
-    def vqe_callback_list(counts, parameters, value, metadata):
+    def vqe_callback(counts, parameters, value, metadata):
         evaluation_count.append(counts)
         parameters_vars.append(parameters)
-        estimated_value.append(value)
+        estimated_value.append(value+nuclear_repulsion_energy)
         meta_dict.append(metadata)
+        # Save VQE info
+        import pickle
+        vqe_info = (ansatz, evaluation_count, parameters_vars, estimated_value, meta_dict)
+        # Path("vqe_info_H{h_count}.pickle").write_bytes(pickle.dumps(vqe_info))
+        Path("vqe_info_N{h_count}.pickle").write_bytes(pickle.dumps(vqe_info))
+
         # print(f"iter: {counts:4d}, energy: {value:.5f}, parameters: {parameters}")
-        print(f"iter: {counts:4d}, energy: {value:.5f}")
+        print(f"iter: {counts:4d}, energy: {value+nuclear_repulsion_energy:.5f}")
 
-    ansatz = effsu2_ansatz
-    solver = VQE(estimator, ansatz, optimizer, callback=vqe_callback_list)
-    solver.initial_point = effsu2_initial_points
+    from qiskit_algorithms import VQE
+    solver = VQE(estimator, ansatz, optimizer, callback=vqe_callback)
+    solver.initial_point = initial_points
 
+    from qiskit_nature.second_q.algorithms import GroundStateEigensolver
     calc = GroundStateEigensolver(mapper, solver)
     res = calc.solve(es_problem)
     print('total_energy: ', res.total_energies[0])
 
-
+    from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
     pass_manager = generate_preset_pass_manager(
         optimization_level=3, backend=backend, #initial_layout=initial_layout
     )
+    import ffsim
     pass_manager.pre_init = ffsim.qiskit.PRE_INIT
 
     ansatz.measure_all()
@@ -167,6 +183,8 @@ def main():
     carryover_threshold = 1e-4
     max_cycle = 100
 
+    from functools import partial
+    from qiskit_addon_sqd.fermion import SCIResult, diagonalize_fermionic_hamiltonian, solve_sci_batch
     sci_solver = partial(solve_sci_batch, spin_sq=0.0, max_cycle=max_cycle)
 
     print(bit_array.shape)
@@ -178,7 +196,7 @@ def main():
         print(f"Iteration {iteration}")
         for i, result in enumerate(results):
             print(f"\tSubsample {i}")
-            print(f"\t\tEnergy: {result.energy + nuclear_repulsion_energy}")
+            print(f"\t\tEnergy: {result.energy}")
             print(f"\t\tSubspace dimension: {np.prod(result.sci_state.amplitudes.shape)}")
 
     result = diagonalize_fermionic_hamiltonian(
@@ -197,7 +215,6 @@ def main():
         carryover_threshold=carryover_threshold,
         callback=sqd_callback,
     )
-
 
 if __name__ == "__main__":
     start_time = time.time()
