@@ -106,7 +106,7 @@ for vqe_iter in list(range(100, 1000, 100))+list(range(1000, 10000, 1000)):
 
     # Eigenstate solver options
     num_batches = 1
-    samples_per_batch = 1000
+    samples_per_batch = 300
     symmetrize_spin = True
     carryover_threshold = 1e-4
     max_cycle = 100
