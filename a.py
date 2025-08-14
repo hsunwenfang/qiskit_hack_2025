@@ -69,44 +69,46 @@ def get_uccsd_ansatz(es_problem, mapper):
 
 def main():
 
-    # es_problem, hcore, eri, nuclear_repulsion_energy, nelec, num_orbitals \
-    #     = get_esproblem(atoms=[["H", (0.00, 0.00, 0.00)], ["H", (0.00, 0.00, 1.0)], ["H", (0.00, 0.00, 2.0)], ["H", (0.00, 0.00, 3.0)]])
+    atoms = [["H", (0.00, 0.00, 0.00)], ["H", (0.00, 0.00, 1.0)], ["H", (0.00, 0.00, 2.0)], ["H", (0.00, 0.00, 3.0)]]
+    atoms = [["H", (0.00, 0.00, 0.00 + i * 1.0)] for i in range(4)]
+    atoms = [["H", (0.00, 0.00, 0.00 + i * 1.0)] for i in range(16)]
 
     es_problem, hcore, eri, nuclear_repulsion_energy, nelec, num_orbitals \
-        = get_esproblem(atoms=[["H", (0.00, 0.00, 0.00)], ["H", (0.00, 0.00, 1.0)]])
-
-    # print(num_orbitals)
-    # sys.exit()
+        = get_esproblem(atoms=atoms)
 
     mapper = JordanWignerMapper()
 
     from qiskit.circuit.library import ExcitationPreserving, EfficientSU2
 
-    tl_circuit = TwoLocal(
+    # UCCSD
+    uccsd_ansatz = get_uccsd_ansatz(es_problem, mapper)
+    uccsd_initial_points = [0.0] * uccsd_ansatz.num_parameters
+
+    # TwoLocal
+    tlc_ansatz = TwoLocal(
         rotation_blocks=["h", "rx"],
         entanglement_blocks="cz",
         entanglement="full",
         reps=2,
         parameter_prefix="y",
     )
+    # the initial point cannot be too small
+    tlc_initial_points = [0.001] * (es_problem.num_spatial_orbitals * 2 * 3)
 
     # ExcitationPreserving
-    ansatz = ExcitationPreserving(
+    ecipre_ansatz = ExcitationPreserving(
         num_qubits=es_problem.num_spatial_orbitals,
         # num_particles=es_problem.num_particles,
         # mapper=mapper,
     )
-    initial_points = [0.0] * (2*ansatz.num_parameters)
+    ecipre_initial_points = [0.0] * (2*ecipre_ansatz.num_parameters)
 
     # EfficientSU2
-    ansatz = EfficientSU2(
+    effsu2_ansatz = EfficientSU2(
         num_qubits=es_problem.num_spatial_orbitals,
+        entanglement="full",
     )
-    initial_points = [0.0] * (2*ansatz.num_parameters)
-
-    # UCCSD
-    ansatz = get_uccsd_ansatz(es_problem, mapper)
-    initial_points = [0.0] * ansatz.num_parameters
+    effsu2_initial_points = [0.01] * (effsu2_ansatz.num_parameters*2)
 
     optimizer = L_BFGS_B()
     backend = AerSimulator()
@@ -126,10 +128,9 @@ def main():
         # print(f"iter: {counts:4d}, energy: {value:.5f}, parameters: {parameters}")
         print(f"iter: {counts:4d}, energy: {value:.5f}")
 
-
+    ansatz = effsu2_ansatz
     solver = VQE(estimator, ansatz, optimizer, callback=vqe_callback_list)
-    # solver = VQE(estimator, ansatz, optimizer, callback=vqe_callback_list)
-    solver.initial_point = initial_points
+    solver.initial_point = effsu2_initial_points
 
     calc = GroundStateEigensolver(mapper, solver)
     res = calc.solve(es_problem)
