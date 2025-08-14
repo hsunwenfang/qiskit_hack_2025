@@ -63,21 +63,17 @@ estimator = Estimator()
 sampler = Sampler(mode=backend)
 
 # Load VQE info
-for vqe_iter in range(200, 10000, 200):
+for vqe_iter in list(range(100, 1000, 100))+list(range(1000, 10000, 1000)):
     vqe_info = pickle.loads(Path(f"vqe_info_H{num_atoms}.pickle").read_bytes())
     (ansatz, evaluation_count, parameters_vars, estimated_value, meta_dict) = vqe_info
 
     if vqe_iter > len(evaluation_count):
         break
-    
-    print()
 
     evaluation_count = evaluation_count[:vqe_iter]
     parameters_vars = parameters_vars[:vqe_iter]
     estimated_value = estimated_value[:vqe_iter]
     meta_dict = meta_dict[:vqe_iter]
-
-    print(f"vqe_iter: {vqe_iter}, total_energy: {estimated_value[-1]+nuclear_repulsion_energy}")
 
     ansatz.measure_all()
 
@@ -110,7 +106,7 @@ for vqe_iter in range(200, 10000, 200):
 
     # Eigenstate solver options
     num_batches = 1
-    samples_per_batch = 300
+    samples_per_batch = 1000
     symmetrize_spin = True
     carryover_threshold = 1e-4
     max_cycle = 100
@@ -135,6 +131,7 @@ for vqe_iter in range(200, 10000, 200):
             carryover_threshold=carryover_threshold,
             callback=sqd_callback,
         )
-        print(f"sqd_iter: {len(result_history)}, total_energy: {result.energy+nuclear_repulsion_energy}, substate dims.: {np.prod(result.sci_state.amplitudes.shape)}") 
+        print(f"vqe_iter: {vqe_iter}, total_energy: {estimated_value[-1]+nuclear_repulsion_energy}, sqd_iter: {len(result_history)}, total_energy: {result.energy+nuclear_repulsion_energy}, subspace dims.: {np.prod(result.sci_state.amplitudes.shape)}")
     except IndexError:
+        print(f"vqe_iter: {vqe_iter}, total_energy: {estimated_value[-1]+nuclear_repulsion_energy}")
         continue
