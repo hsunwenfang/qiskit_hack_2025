@@ -91,7 +91,7 @@ def main():
     h_count = 6
     atoms = [["H", (0.00, 0.00, 0.00 + i * 1.0)] for i in range(h_count)]
 
-    h_count = 2
+    n_count = 2
     atoms = [["N", (0.00, 0.00, 0.00)],  ["N", (0.00, 0.00, 1.19)]]
 
     es_problem, hcore, eri, nuclear_repulsion_energy, nelec, num_orbitals \
@@ -137,8 +137,8 @@ def main():
         # Save VQE info
         import pickle
         vqe_info = (ansatz, evaluation_count, parameters_vars, estimated_value, meta_dict)
-        # Path("vqe_info_H{h_count}.pickle").write_bytes(pickle.dumps(vqe_info))
-        Path("vqe_info_N{h_count}.pickle").write_bytes(pickle.dumps(vqe_info))
+        # Path(f"vqe_info_H{h_count}.pickle").write_bytes(pickle.dumps(vqe_info))
+        Path(f"vqe_info_N{n_count}.pickle").write_bytes(pickle.dumps(vqe_info))
 
         # print(f"iter: {counts:4d}, energy: {value:.5f}, parameters: {parameters}")
         print(f"iter: {counts:4d}, energy: {value+nuclear_repulsion_energy:.5f}")
