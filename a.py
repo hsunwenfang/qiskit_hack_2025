@@ -76,11 +76,12 @@ def get_ecipre_ansatz(es_problem):
     ecipre_initial_points = [0.0] * (2*ecipre_ansatz.num_parameters)
     return ecipre_ansatz, ecipre_initial_points
 
-def get_effsu2_ansatz(es_problem):
+def get_effsu2_ansatz(es_problem, reps):
     from qiskit.circuit.library import EfficientSU2
     effsu2_ansatz = EfficientSU2(
         num_qubits=es_problem.num_spatial_orbitals,
-        entanglement="full",
+        entanglement="linear",
+        reps=reps,
     )
     effsu2_initial_points = [0.01] * (effsu2_ansatz.num_parameters*2)
     return effsu2_ansatz, effsu2_initial_points
@@ -99,7 +100,7 @@ def main():
     from qiskit_nature.second_q.mappers import JordanWignerMapper
     mapper = JordanWignerMapper()
 
-    ansatz, initial_points = get_effsu2_ansatz(es_problem)
+    ansatz, initial_points = get_effsu2_ansatz(es_problem, 3)
 
     from qiskit_algorithms.optimizers import SLSQP, L_BFGS_B
     from qiskit.primitives import Estimator
