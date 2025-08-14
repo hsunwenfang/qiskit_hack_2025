@@ -131,7 +131,7 @@ for vqe_iter in list(range(100, 1000, 100))+list(range(1000, 10000, 1000)):
             carryover_threshold=carryover_threshold,
             callback=sqd_callback,
         )
-        print(f"vqe_iter: {vqe_iter}, total_energy: {estimated_value[-1]+nuclear_repulsion_energy}, sqd_iter: {len(result_history)}, total_energy: {result.energy+nuclear_repulsion_energy}, subspace dims.: {np.prod(result.sci_state.amplitudes.shape)}")
+        print(f"vqe_iter: {vqe_iter}, energy: {estimated_value[-1]}, sqd_iter: {len(result_history)}, energy: {result.energy+nuclear_repulsion_energy}, subspace dims.: {np.prod(result.sci_state.amplitudes.shape)}")
     except IndexError:
-        print(f"vqe_iter: {vqe_iter}, total_energy: {estimated_value[-1]+nuclear_repulsion_energy}")
+        print(f"vqe_iter: {vqe_iter}, energy: {estimated_value[-1]}")
         continue
