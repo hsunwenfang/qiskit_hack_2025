@@ -114,6 +114,7 @@ meta_dict = meta_dict[:vqe_iter]
     # print(f"iter: {counts:4d}, energy: {value:.5f}, parameters: {parameters}")
 for counts, value in zip(evaluation_count, estimated_value):
     print(f"iter: {counts:4d}, energy: {value:.5f}")
+print(f"total_energy: {estimated_value[vqe_iter-1] + nuclear_repulsion_energy}")
 
 ansatz.measure_all()
 
