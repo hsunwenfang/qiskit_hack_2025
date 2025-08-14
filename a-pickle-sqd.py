@@ -22,7 +22,7 @@ from qiskit_addon_sqd.fermion import SCIResult, diagonalize_fermionic_hamiltonia
 import pickle
 from pathlib import Path
 
-atoms = [["H", (0.00, 0.00, 0.00)], ["H", (0.00, 0.00, 0.74)]]
+atoms = [["H", (0.00, 0.00, 0.00 + i * 1.0)] for i in range(4)]
 mol = pyscf.gto.Mole()
 mol.build(
     atom=atoms,
@@ -105,8 +105,11 @@ sampler = Sampler(mode=backend)
 vqe_info = pickle.loads(Path("vqe_info.pickle").read_bytes())
 (ansatz, evaluation_count, parameters_vars, estimated_value, meta_dict) = vqe_info
 
-for counts, parameters, value, metadata in zip(evaluation_count, parameters_vars, estimated_value, meta_dict):
-    print(f"iter: {counts:4d}, energy: {value:.5f}, parameters: {parameters}")
+vqe_iter = 100 # Give 100th VQE result to SQD
+# for counts, parameters, value, metadata in zip(evaluation_count, parameters_vars, estimated_value, meta_dict):
+    # print(f"iter: {counts:4d}, energy: {value:.5f}, parameters: {parameters}")
+for counts, value in list(zip(evaluation_count, estimated_value))[:vqe_iter]:
+    print(f"iter: {counts:4d}, energy: {value:.5f}")
 
 ansatz.measure_all()
 

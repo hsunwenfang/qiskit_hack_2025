@@ -13,7 +13,7 @@ from qiskit.primitives import Estimator
 from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
 from qiskit_nature.second_q.circuit.library import HartreeFock, UCCSD
 from qiskit_algorithms import VQE
-from qiskit.circuit.library import TwoLocal
+from qiskit.circuit.library import TwoLocal, ExcitationPreserving, EfficientSU2
 from qiskit_nature.second_q.algorithms import GroundStateEigensolver
 from qiskit_ibm_runtime import SamplerV2 as Sampler
 from qiskit_aer import AerSimulator
@@ -22,7 +22,7 @@ from qiskit_addon_sqd.fermion import SCIResult, diagonalize_fermionic_hamiltonia
 import pickle
 from pathlib import Path
 
-atoms = [["H", (0.00, 0.00, 0.00)], ["H", (0.00, 0.00, 0.74)]]
+atoms = [["H", (0.00, 0.00, 0.00 + i * 1.0)] for i in range(4)]
 mol = pyscf.gto.Mole()
 mol.build(
     atom=atoms,
@@ -62,15 +62,33 @@ uccsd_ansatz = UCCSD(
         mapper,
     ),
 )
-two_local_ansatz = TwoLocal(
+uccsd_initial_point = [0.0] * (uccsd_ansatz.num_parameters)
+
+# TwoLocal
+tl_ansatz = TwoLocal(
     rotation_blocks=["h", "rx"],
     entanglement_blocks="cz",
     entanglement="full",
     reps=2,
     parameter_prefix="y",
 )
+tl_initial_point = [0.0] * (2*tl_ansatz.num_parameters)
 
-ansatz = uccsd_ansatz
+# ExcitationPreserving
+ep_ansatz = ExcitationPreserving(
+    num_qubits=es_problem.num_spatial_orbitals,
+)
+ep_initial_point = [0.0] * (2*ep_ansatz.num_parameters)
+
+# EfficientSU2
+effsu2_ansatz = EfficientSU2(
+    num_qubits=es_problem.num_spatial_orbitals,
+    entanglement="full",
+)
+effsu2_initial_point = [0.01] * (effsu2_ansatz.num_parameters*2)
+
+ansatz = effsu2_ansatz
+initial_point = effsu2_initial_point
 optimizer = L_BFGS_B()
 backend = AerSimulator()
 estimator = Estimator()
@@ -91,11 +109,12 @@ def vqe_callback(counts, parameters, value, metadata):
     vqe_info = (ansatz, evaluation_count, parameters_vars, estimated_value, meta_dict)
     Path("vqe_info.pickle").write_bytes(pickle.dumps(vqe_info))
 
-    print(f"iter: {counts:4d}, energy: {value:.5f}, parameters: {parameters}")
+    # print(f"iter: {counts:4d}, energy: {value:.5f}, parameters: {parameters}")
+    print(f"iter: {counts:4d}, energy: {value:.5f}")
 
 
 solver = VQE(estimator, ansatz, optimizer, callback=vqe_callback)
-solver.initial_point = [0.0] * ansatz.num_parameters
+solver.initial_point = initial_point
 
 calc = GroundStateEigensolver(mapper, solver)
 res = calc.solve(es_problem)
