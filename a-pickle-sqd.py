@@ -22,7 +22,8 @@ from qiskit_addon_sqd.fermion import SCIResult, diagonalize_fermionic_hamiltonia
 import pickle
 from pathlib import Path
 
-atoms = [["H", (0.00, 0.00, 0.00 + i * 1.0)] for i in range(4)]
+num_atoms = 6
+atoms = [["H", (0.00, 0.00, 0.00 + i * 1.0)] for i in range(num_atoms)]
 mol = pyscf.gto.Mole()
 mol.build(
     atom=atoms,
@@ -52,69 +53,24 @@ nelec = (num_elec_a, num_elec_b)
 
 es_problem = driver.run()
 mapper = JordanWignerMapper()
-uccsd_ansatz = UCCSD(
-    es_problem.num_spatial_orbitals,
-    es_problem.num_particles,
-    mapper,
-    initial_state=HartreeFock(
-        es_problem.num_spatial_orbitals,
-        es_problem.num_particles,
-        mapper,
-    ),
-)
-two_local_ansatz = TwoLocal(
-    rotation_blocks=["h", "rx"],
-    entanglement_blocks="cz",
-    entanglement="full",
-    reps=2,
-    parameter_prefix="y",
-)
 
-# ansatz = uccsd_ansatz
-# optimizer = L_BFGS_B()
 backend = AerSimulator()
 estimator = Estimator()
 sampler = Sampler(mode=backend)
 
-
-# evaluation_count=[]
-# parameters_vars=[]
-# estimated_value=[]
-# meta_dict=[]
-# def vqe_callback(counts, parameters, value, metadata):
-#     evaluation_count.append(counts)
-#     parameters_vars.append(parameters)
-#     estimated_value.append(value)
-#     meta_dict.append(metadata)
-
-#     # Save VQE info
-#     vqe_info = (ansatz, evaluation_count, parameters_vars, estimated_value, meta_dict)
-#     Path("vqe_info.pickle").write_bytes(pickle.dumps(vqe_info))
-
-#     print(f"iter: {counts:4d}, energy: {value:.5f}, parameters: {parameters}")
-
-
-# solver = VQE(estimator, ansatz, optimizer, callback=vqe_callback)
-# solver.initial_point = [0.0] * ansatz.num_parameters
-
-# calc = GroundStateEigensolver(mapper, solver)
-# res = calc.solve(es_problem)
-# print('total_energy: ', res.total_energies[0])
-
 # Load VQE info
-vqe_info = pickle.loads(Path("vqe_info.pickle").read_bytes())
+vqe_info = pickle.loads(Path(f"vqe_info_H{num_atoms}.pickle").read_bytes())
 (ansatz, evaluation_count, parameters_vars, estimated_value, meta_dict) = vqe_info
 
-vqe_iter = 200 # Index of intermediate VQE result to SQD
+vqe_iter = 2500 # Index of intermediate VQE result given to SQD
 evaluation_count = evaluation_count[:vqe_iter]
 parameters_vars = parameters_vars[:vqe_iter]
 estimated_value = estimated_value[:vqe_iter]
 meta_dict = meta_dict[:vqe_iter]
-# for counts, parameters, value, metadata in zip(evaluation_count, parameters_vars, estimated_value, meta_dict):
-    # print(f"iter: {counts:4d}, energy: {value:.5f}, parameters: {parameters}")
+
 for counts, value in zip(evaluation_count, estimated_value):
-    print(f"iter: {counts:4d}, energy: {value:.5f}")
-print(f"total_energy: {estimated_value[vqe_iter-1] + nuclear_repulsion_energy}")
+    print(f"iter: {counts:4d}, energy: {value:.5f}, total_energy: {value+nuclear_repulsion_energy:.5f}")
+print('total_energy: ', estimated_value[-1]+nuclear_repulsion_energy)
 
 ansatz.measure_all()
 
@@ -171,6 +127,3 @@ result = diagonalize_fermionic_hamiltonian(
     carryover_threshold=carryover_threshold,
     callback=sqd_callback,
 )
-
-
-
