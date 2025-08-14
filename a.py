@@ -78,15 +78,19 @@ def get_ecipre_ansatz(es_problem):
 
 def get_effsu2_ansatz(es_problem, reps):
     from qiskit.circuit.library import EfficientSU2
+    print(es_problem.num_spatial_orbitals)
     effsu2_ansatz = EfficientSU2(
-        num_qubits=es_problem.num_spatial_orbitals,
+        num_qubits=es_problem.num_spatial_orbitals*2,
         entanglement="linear",
         reps=reps,
     )
-    effsu2_initial_points = [0.01] * (effsu2_ansatz.num_parameters*2)
+    effsu2_initial_points = [0.01] * (effsu2_ansatz.num_parameters)
     return effsu2_ansatz, effsu2_initial_points
 
 def main():
+
+
+    skip_vqe = True
 
     h_count = 6
     atoms = [["H", (0.00, 0.00, 0.00 + i * 1.0)] for i in range(h_count)]
@@ -94,8 +98,15 @@ def main():
     h_count = 2
     atoms = [["N", (0.00, 0.00, 0.00)],  ["N", (0.00, 0.00, 1.19)]]
 
+    atoms = [["N", (0.00, 0.00, 0.00)],  ["N", (0.00, 0.00, 1.19)]]
+
+    atoms = [["C", (0, 0, 0)], ["O", (-1.1970, 0, 0)], ["O", (1.1970, 0, 0)]]
+
     es_problem, hcore, eri, nuclear_repulsion_energy, nelec, num_orbitals \
         = get_esproblem(atoms=atoms)
+
+    print(nuclear_repulsion_energy)
+    sys.exit()
 
     from qiskit_nature.second_q.mappers import JordanWignerMapper
     mapper = JordanWignerMapper()
@@ -119,38 +130,39 @@ def main():
         overwrite=True
     )
     service = QiskitRuntimeService(name="q222")
-    # backend = service.least_busy(operational=True, simulator=False)
+    backend = service.least_busy(operational=True, simulator=False)
     print(backend)
     estimator = Estimator()
     sampler = Sampler(mode=backend)
 
-    evaluation_count=[]
-    parameters_vars=[]
-    estimated_value=[]
-    meta_dict=[]
+    if not skip_vqe:
+        evaluation_count=[]
+        parameters_vars=[]
+        estimated_value=[]
+        meta_dict=[]
 
-    def vqe_callback(counts, parameters, value, metadata):
-        evaluation_count.append(counts)
-        parameters_vars.append(parameters)
-        estimated_value.append(value+nuclear_repulsion_energy)
-        meta_dict.append(metadata)
-        # Save VQE info
-        import pickle
-        vqe_info = (ansatz, evaluation_count, parameters_vars, estimated_value, meta_dict)
-        # Path("vqe_info_H{h_count}.pickle").write_bytes(pickle.dumps(vqe_info))
-        Path("vqe_info_N{h_count}.pickle").write_bytes(pickle.dumps(vqe_info))
+        def vqe_callback(counts, parameters, value, metadata):
+            evaluation_count.append(counts)
+            parameters_vars.append(parameters)
+            estimated_value.append(value+nuclear_repulsion_energy)
+            meta_dict.append(metadata)
+            # Save VQE info
+            import pickle
+            vqe_info = (ansatz, evaluation_count, parameters_vars, estimated_value, meta_dict)
+            # Path("vqe_info_H{h_count}.pickle").write_bytes(pickle.dumps(vqe_info))
+            Path("vqe_info_N{h_count}.pickle").write_bytes(pickle.dumps(vqe_info))
 
-        # print(f"iter: {counts:4d}, energy: {value:.5f}, parameters: {parameters}")
-        print(f"iter: {counts:4d}, energy: {value+nuclear_repulsion_energy:.5f}")
+            # print(f"iter: {counts:4d}, energy: {value:.5f}, parameters: {parameters}")
+            print(f"iter: {counts:4d}, energy: {value+nuclear_repulsion_energy:.5f}")
 
-    from qiskit_algorithms import VQE
-    solver = VQE(estimator, ansatz, optimizer, callback=vqe_callback)
-    solver.initial_point = initial_points
+        from qiskit_algorithms import VQE
+        solver = VQE(estimator, ansatz, optimizer, callback=vqe_callback)
+        solver.initial_point = initial_points
 
-    from qiskit_nature.second_q.algorithms import GroundStateEigensolver
-    calc = GroundStateEigensolver(mapper, solver)
-    res = calc.solve(es_problem)
-    print('total_energy: ', res.total_energies[0])
+        from qiskit_nature.second_q.algorithms import GroundStateEigensolver
+        calc = GroundStateEigensolver(mapper, solver)
+        res = calc.solve(es_problem)
+        print('total_energy: ', res.total_energies[0])
 
     from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
     pass_manager = generate_preset_pass_manager(
@@ -161,7 +173,10 @@ def main():
 
     ansatz.measure_all()
     isa_circuit = pass_manager.run(ansatz)
-    job = sampler.run([(isa_circuit, parameters_vars[-1])], shots=10_000)
+    if skip_vqe:
+        job = sampler.run([(isa_circuit, initial_points)], shots=10_000)
+    else:
+        job = sampler.run([(isa_circuit, parameters_vars[-1])], shots=10_000)
     primitive_result = job.result()
     print('primitive result:', primitive_result)
     pub_result = primitive_result[0]
@@ -197,7 +212,7 @@ def main():
         print(f"Iteration {iteration}")
         for i, result in enumerate(results):
             print(f"\tSubsample {i}")
-            print(f"\t\tEnergy: {result.energy}")
+            print(f"\t\tEnergy: {result.energy+nuclear_repulsion_energy}")
             print(f"\t\tSubspace dimension: {np.prod(result.sci_state.amplitudes.shape)}")
 
     result = diagonalize_fermionic_hamiltonian(
